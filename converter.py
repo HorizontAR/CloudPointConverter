@@ -1,58 +1,47 @@
-import sys
+import sys 
+import readers
+import writers
 
-def writePCDHeader(sourceFile,targetFile):    
-    lineCount = sum(1 for _ in sourceFile) 
-    sourceFile.seek(0)   
-    targetFile.write('VERSION .7\n')
-    targetFile.write('FIELDS x y z\n')
-    targetFile.write('SIZE 4 4 4\n')
-    targetFile.write('TYPE F F F\n')
-    targetFile.write('COUNT 1 1 1\n')
-    targetFile.write(f'WIDTH {lineCount}\n')
-    targetFile.write('HEIGHT 1\n')
-    targetFile.write('VIEWPOINT 0 0 0 1 0 0 0\n')
-    targetFile.write(f'POINTS {lineCount}\n')
-    targetFile.write('DATA ascii\n')    
+def getReader(fullFileName):     
+    fileFormat = fullFileName.split('.')[1]
+    reader = {
+        'xyz': readers.xyzFileReader(fullFileName),
+        'txt': readers.txtFileReader(fullFileName),
+        'pcd': readers.pcdFileReader(fullFileName),
+        'obj': readers.objFileReader(fullFileName)
+    }.get(fileFormat)
+    if not reader:
+        raise Exception(f'Conversion from .{fileFormat} is not supported')
+    return reader
 
-def convertToPCD(fileName):
-    convertedFileName = fileName.split('.')[0] + '.pcd'
-    lineCounter = 1
+def getWriter(fullFileName, reader):
+    fileFormat = fullFileName.split('.')[1]
+    writer = {
+        'txt': writers.txtFileWriter(fullFileName),
+        'pcd': writers.pcdFileWriter(fullFileName,reader),
+        'xyz': writers.xyzFileWriter(fullFileName)
+    }.get(fileFormat)
+    if not writer:
+        raise Exception(f'Conversion to .{fileFormat} is not supported')
+    return writer
 
-    with open(fileName, 'r') as originalFile:
-        with open(convertedFileName, 'w') as targetFile:
-            writePCDHeader(originalFile, targetFile)
-            line = originalFile.readline()
-            while line:
-                (x,y,z) = line.split(',')
-                newLine = f'{x} {y} {z}'           
-                targetFile.writelines(newLine)        
-                line = originalFile.readline()
-                lineCounter += 1
-    return convertedFileName, lineCounter
+srcFileName = sys.argv[1]
+reader = getReader(srcFileName)
 
-def convertToTXT(fileName):
-    convertedFileName = fileName.split('.')[0] + '.txt'
-    lineCounter = 1
-
-    with open(fileName, 'r') as originalFile:
-        with open(convertedFileName, 'w') as targetFile:
-            line = originalFile.readline()
-            while line:
-                newLine = f'Point{lineCounter},{line}'            
-                targetFile.writelines(newLine)                     
-                line = originalFile.readline()
-                lineCounter += 1
-    return convertedFileName, lineCounter
-
-fileName = sys.argv[1]
-targetFormat = 'pcd'
 if len(sys.argv) > 2:
-    targetFormat = sys.argv[2]
-
-if targetFormat == 'txt':
-    rezFileName, totalLines = convertToTXT(fileName)
+    targetFileName = sys.argv[2]
 else:
-    rezFileName, totalLines = convertToPCD(fileName)
+    fileName = srcFileName.split('.')[0]
+    targetFileName =  f'{fileName}.xyz'
 
-print(f'Done! File {fileName} converted to {rezFileName}. Total lines:{totalLines}')
+writer = getWriter(targetFileName, reader)
+
+pointNumber = 0
+with reader:
+    with writer:
+        for (x,y,z) in reader:                         
+            writer.writeData(x,y,z)            
+            pointNumber += 1
+
+print(f'Done! File {srcFileName} converted to {targetFileName}. Total points:{pointNumber}')
 
